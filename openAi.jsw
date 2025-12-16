@@ -12,7 +12,7 @@ export async function createOpenAIResponse(inputText) {
             model: "gpt-4o",  // Use an appropriate model ID, e.g., gpt-4o or as per your needs
             input: inputText,  // The text input for the model
             // Add other optional parameters as needed, e.g.:
-            max_output_tokens: 100,
+            max_output_tokens: 5000,
             temperature: 0.7,
             tool_choice: "auto",
             tools: []  // If using tools or function calling

@@ -1,6 +1,9 @@
+import wixLocationFrontend from "wix-location-frontend";
 import { createOpenAIResponse } from "backend/openAi"
 import wixData from 'wix-data';
 import wixWindowFrontend from "wix-window-frontend";
+import { currentMember, authentication } from "wix-members-frontend";
+import { orders } from "wix-pricing-plans-frontend";
 
 // IMPORTANT: Replace the placeholder IDs below with the actual IDs of your elements.
 const DROPDOWN_PRODUCT_TYPE_ID = "#dropdownProductType";
@@ -10,10 +13,44 @@ const DROPDOWN_TARGET_AUDIENCE_ID = "#dropdownTargetAudience";
 const GENERATE_BUTTON_ID = "#generate"; // Assuming the button ID is #generate
 const ERROR_TEXT_ID = "#errorText1"; // ID for the status/error text element
 let dbTemplate = "";
-    let dbInstruction = "";
+let dbInstruction = "";
+let options = {
+    fieldsets: ['FULL']
+}
+let MemberId = null;
+let report = null;
 
 $w.onReady(async function () {
     // Collapse sections and error text on initial load
+    // Check for member and active orders
+    if (authentication.loggedIn()) {
+        try {
+            const member = await currentMember.getMember(options);
+            MemberId = member._id;
+            console.log("Member ID:", MemberId);
+
+            // Check orders for active membership
+            if (wixWindowFrontend.viewMode === 'Site') {
+                const ordersList = await orders.listCurrentMemberOrders();
+                const hasActiveMembership = ordersList.some(order => order.status === "ACTIVE");
+
+                if (!hasActiveMembership) {
+                    console.log("No active membership found. Redirecting to /pricing-plans...");
+                    wixLocationFrontend.to("/pricing-plans");
+                } else {
+                    console.log("Active membership confirmed.");
+                }
+            } else {
+                console.log("Preview mode: Skipping membership check.");
+            }
+        } catch (error) {
+            console.error("Error checking membership details:", error);
+        }
+    } else {
+        console.log("Member is not logged in. Redirecting to login...");
+        authentication.promptLogin();
+    }
+
     $w("#reportSection").collapse();
     $w(ERROR_TEXT_ID).collapse(); // Collapse error text on load
 
@@ -57,8 +94,13 @@ async function onGenerateButtonClick() {
     const targetAudience = $w(DROPDOWN_TARGET_AUDIENCE_ID).value;
     const purposeGoal = $w("#purpose").value;
     const wordCount = $w("#wordCount").value;
-    const keywords = $w("#keywordsTextArea").value || "";
-    const notes = $w("#keywordsTextArea").value || "";
+
+    // Parse keywords from text area: split by comma or whitespace, ignore empty, join with comma
+    const rawKeywords = $w("#keywordsTextArea").value || "";
+    const keywords = rawKeywords.split(/[\s,]+/).filter(k => k).join(", ");
+
+    // Capture notes from the dedicated text area
+    const notes = $w("#notesTextArea").value || "";
 
     // Collapse any previous error/status message
     $w(ERROR_TEXT_ID).collapse();
@@ -78,29 +120,29 @@ async function onGenerateButtonClick() {
 
     // 2. Query the AdminControl collection for the instruction
     try {
-        let query = wixData.query("AdminControl"); 
+        let query = wixData.query("AdminControl");
         let results = await query.find();
 
-        const correctItem = results.items.find(item => 
-    item.promptTemplateName && item.instruction
-);
+        const correctItem = results.items.find(item =>
+            item.promptTemplateName && item.instruction
+        );
 
-// Check if an item meeting the criteria was found
-if (correctItem) {
-    // If found, safely assign the values from that item
-    dbTemplate = correctItem.promptTemplateName;
-    dbInstruction = correctItem.instruction;
-    
-    console.log(`Template found at random index: ${dbTemplate}`);
-    console.log(`Instruction found at random index: ${dbInstruction}`);
+        // Check if an item meeting the criteria was found
+        if (correctItem) {
+            // If found, safely assign the values from that item
+            dbTemplate = correctItem.promptTemplateName;
+            dbInstruction = correctItem.instruction;
 
-} else {
-    // If no item meets the criteria (or array is empty)
-    dbTemplate = "";
-    dbInstruction = "";
-    
-    console.log("No suitable item (with both template and instruction) was found.");
-}
+            console.log(`Template found at random index: ${dbTemplate}`);
+            console.log(`Instruction found at random index: ${dbInstruction}`);
+
+        } else {
+            // If no item meets the criteria (or array is empty)
+            dbTemplate = "";
+            dbInstruction = "";
+
+            console.log("No suitable item (with both template and instruction) was found.");
+        }
 
         // 3. Construct the final prompt
         const finalPrompt = `${dbTemplate} \n\n ${dbInstruction}\n\n User Request: Product Type: ${productType}\n\n genre: ${genre}\n\n tone: ${tone}\n\n targetAudience: ${targetAudience}\n\n Purpose Goal: ${purposeGoal}\n\n Word Count: ${wordCount}\n\n Keywords: ${keywords}\n\n Notes: ${notes}\n\n`;
@@ -124,14 +166,14 @@ async function sendToOpenAI(prompt) {
     try {
         // 5. Call the backend function
         const aiResponse = await createOpenAIResponse(prompt);
-
+        report = await aiResponse;
         $w("#reportOutput").text = aiResponse;
         $w("#reportSection").expand();
         $w("#formSection").collapse();
-        
+
         // --- Action 1: Collapse status text after success ---
-        $w(ERROR_TEXT_ID).collapse(); 
-        
+        $w(ERROR_TEXT_ID).collapse();
+
     } catch (error) {
         console.error("Failed to get response from OpenAI:", error);
         $w(ERROR_TEXT_ID).text = "❌ Failed to generate report. Please check the backend service.";
@@ -145,16 +187,16 @@ $w('#generateAgain').onClick((event) => {
     $w("#reportSection").collapse();
     $w("#formSection").expand();
     $w("#reportOutput").text = " ";
-    
+
     // --- Action 2: Collapse error text when trying again ---
-    $w(ERROR_TEXT_ID).collapse(); 
+    $w(ERROR_TEXT_ID).collapse();
     $w('#errorText2').collapse();
 })
 
 $w('#copy').onClick(async (event) => {
     // Collapse any old error text before trying to copy
-    $w('#errorText2').collapse(); 
-    
+    $w('#errorText2').collapse();
+
     const ReportText = $w('#reportOutput').text;
     await wixWindowFrontend
         .copyToClipboard(ReportText)
@@ -166,4 +208,24 @@ $w('#copy').onClick(async (event) => {
             $w('#errorText2').text = "❌ Report copy failed... try again";
             $w('#errorText2').expand();
         });
+})
+
+$w('#saveReport').onClick(async (event) => {
+    let toInsert = {
+        memberId: MemberId,
+        report: report
+    }
+    await wixData
+        .insert("SavedReports", toInsert)
+        .then((item) => {
+            console.log(item); //see item below
+            $w('#errorText2').text = "✅ Report Successfully Saved";
+            $w('#errorText2').expand();
+        })
+        .catch((err) => {
+            console.log(err);
+            $w('#errorText2').text = "❌ Report save failed... try again";
+            $w('#errorText2').expand();
+        });
+
 })
