@@ -14,6 +14,51 @@ const GENERATE_BUTTON_ID = "#generate"; // Assuming the button ID is #generate
 const ERROR_TEXT_ID = "#errorText1"; // ID for the status/error text element
 let dbTemplate = "";
 let dbInstruction = "";
+
+// Product-Ready Rules based on requirements
+const PRODUCT_RULES = {
+    "Lead Magnet": {
+        mustInclude: ["Clear Title", "Brief Welcome/Introduction", "Actionable Framework (checklist, steps, tips, or short guide)", "Reflection or Action Section", "Clear Call-to-Action (CTA)"],
+        mustNotBe: ["Blog post", "Generic informational article", "Academic explanation"],
+        defaultAssumption: "1-3 pages, high-value downloadable resource.",
+        structuralRequirement: "Use bullet points and bold headers for scanability."
+    },
+    "Lesson Plan": {
+        mustInclude: ["Lesson Title", "Target Audience/Level", "Learning Objectives", "Materials Needed", "Step-by-Step Instruction Guide", "Activities & Exercises", "Assessment/Outcomes"],
+        mustNotBe: ["Devotional", "Motivational article", "General advice list"],
+        defaultAssumption: "Instructor-ready teaching guide for immediate classroom use.",
+        structuralRequirement: "Formal educational structure with timed sections if possible."
+    },
+    "Workbook / Worksheet": {
+        mustInclude: ["Engaging Title", "Guided Instructions", "Self-Reflection Questions", "Fill-in-the-blank or Exercise Sections", "Actionable Exercises"],
+        mustNotBe: ["Essay-style content", "Narrative-only material"],
+        defaultAssumption: "Interactive digital product designed for user participation.",
+        structuralRequirement: "Consistent use of 'Your Turn' or 'Reflect Here' boxes."
+    },
+    "Course Outline": {
+        mustInclude: ["Course Title", "High-level Course Summary", "Module Breakdown", "Individual Lesson Titles per Module", "Specific Learning Outcomes per Lesson", "Recommended Resources"],
+        mustNotBe: ["Full transcripts", "Short summary"],
+        defaultAssumption: "Comprehensive structural map for a multi-week training program.",
+        structuralRequirement: "Logical progression from beginner to advanced concepts."
+    },
+    "Book": {
+        mustInclude: ["COMING SOON"],
+        mustNotBe: ["Any output"],
+        defaultAssumption: "Hold for Post-Beta.",
+        structuralRequirement: "NOT AVAILABLE IN BETA."
+    }
+};
+
+const UNIVERSAL_CHECKLIST = [
+    "Match the selected Product Type exactly",
+    "Product-Ready: Be usable as-is (PDF, document, or digital download)",
+    "Professional Formatting: Use Markdown (headings, bolding, lists)",
+    "High Quality: Zero spelling or grammatical errors",
+    "Actionable: Focus on transformation and results, not just info",
+    "No Meta-Talk: Do not include 'Here is your product' or conversational filler",
+    "Word Count Adherence: Meet or exceed the targeted word count with meaningful content"
+];
+
 let options = {
     fieldsets: ['FULL']
 }
@@ -75,8 +120,14 @@ $w.onReady(async function () {
         if (results.items.length > 0) $w("#purpose").options = results.items.map(item => ({ label: item, value: item }));
     }).catch(error => console.error("Error loading Target Audiences:", error));
     await wixData.query("AdminControl").distinct("wordCount").then(results => {
-        if (results.items.length > 0) $w("#wordCount").options = results.items.map(item => ({ label: item, value: item }));
-    }).catch(error => console.error("Error loading Target Audiences:", error));
+        if (results.items.length > 0) {
+            // Filter out "Very Long" for Beta phase
+            const filteredOptions = results.items
+                .filter(item => !item.includes("Very Long"))
+                .map(item => ({ label: item, value: item }));
+            $w("#wordCount").options = filteredOptions;
+        }
+    }).catch(error => console.error("Error loading Word Counts:", error));
     // --- End of dropdown population logic ---
 
     // Set up click handler
@@ -118,6 +169,13 @@ async function onGenerateButtonClick() {
     $w(ERROR_TEXT_ID).expand();
     $w(GENERATE_BUTTON_ID).disable(); // Disable button while processing
 
+    // BETA RESTRICTION: Check for Book
+    if (productType === "Book") {
+        $w(ERROR_TEXT_ID).text = "🚧 'Full Book' is held for Post-Beta. Please select another product type.";
+        $w(GENERATE_BUTTON_ID).enable();
+        return;
+    }
+
     // 2. Query the AdminControl collection for the instruction
     try {
         let query = wixData.query("AdminControl");
@@ -144,10 +202,58 @@ async function onGenerateButtonClick() {
             console.log("No suitable item (with both template and instruction) was found.");
         }
 
-        // 3. Construct the final prompt
-        const finalPrompt = `${dbTemplate} \n\n ${dbInstruction}\n\n User Request: Product Type: ${productType}\n\n genre: ${genre}\n\n tone: ${tone}\n\n targetAudience: ${targetAudience}\n\n Purpose Goal: ${purposeGoal}\n\n Word Count: ${wordCount}\n\n Keywords: ${keywords}\n\n Notes: ${notes}\n\n`;
+        // 3. Construct the product-specific rules part of the prompt
+        const rules = PRODUCT_RULES[productType];
+        let rulesPrompt = "";
 
-        // 4. Call OpenAI
+        if (rules) {
+            rulesPrompt = `
+### PRODUCT-READY RULES FOR ${productType.toUpperCase()}:
+- MUST INCLUDE: ${rules.mustInclude.join(", ")}
+- MUST NOT BE: ${rules.mustNotBe.join(", ")}
+- DEFAULT ASSUMPTION: ${rules.defaultAssumption}
+
+### UNIVERSAL PRODUCT-READY CHECKLIST:
+${UNIVERSAL_CHECKLIST.map(item => `- ${item}`).join("\n")}
+            `;
+        }
+
+        // 4. Construct the final prompt with a high-priority "System Instruction" block
+        const finalPrompt = `
+### SYSTEM ROLE:
+You are an expert ${productType} creator and professional editor. Your goal is to produce a "READY-TO-SELL" digital product.
+
+### FINAL PRODUCT CRITERIA:
+${UNIVERSAL_CHECKLIST.map(item => `- ${item}`).join("\n")}
+
+### INSTRUCTIONS:
+${dbInstruction}
+
+${rulesPrompt}
+
+### USER-SELECTED PARAMETERS:
+- Product Type: ${productType}
+- Genre/Topic: ${genre}
+- Tone: ${tone}
+- Target Audience: ${targetAudience}
+- Purpose/Goal: ${purposeGoal}
+- Targeted Word Count: ${wordCount}
+- Mandatory Keywords: ${keywords}
+- Additional Notes: ${notes}
+
+### FINAL OUTPUT REQUIREMENTS:
+1. START IMMEDIATELY with the product title.
+2. DO NOT include any introductory or concluding remarks (e.g., "I hope this helps").
+3. ENSURE the depth of content matches the Word Count: ${wordCount}. If 'Long' or 'Very Long' (if applicable) is selected, provide exhaustive detail.
+4. If the product is a BOOK, it MUST have a chapter-by-chapter structure with at least 5-10 chapters unless otherwise specified.
+5. CHECK all spelling and grammar before outputting.
+
+[PROMPT TEMPLATE START]
+${dbTemplate}
+[PROMPT TEMPLATE END]
+`;
+
+        // 5. Call OpenAI
         await sendToOpenAI(finalPrompt);
 
     } catch (error) {
