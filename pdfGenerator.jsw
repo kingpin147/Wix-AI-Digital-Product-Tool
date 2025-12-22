@@ -1,0 +1,221 @@
+import { mediaManager } from 'wix-media-backend';
+import PDFDocument from 'pdfkit';
+
+export async function generatePDF(contentData) {
+    console.log('=== PDF GENERATION STARTED ===');
+    console.log('Input type:', typeof contentData);
+    console.log('Input length:', contentData ? contentData.length : 0);
+
+    try {
+        // Handle both Object and String input types for robustness
+        let title = "";
+        let subtitle = "";
+        let body = "";
+
+        if (typeof contentData === 'string') {
+            console.log('Processing string input...');
+            const rawLines = contentData.split('\n');
+
+            // 1. Check for Title (# )
+            if (rawLines.length > 0 && rawLines[0].trim().startsWith('# ')) {
+                title = rawLines[0].trim().substring(2);
+                rawLines.shift(); // Remove title line
+            }
+
+            // 2. Check for Subtitle (## )
+            if (rawLines.length > 0 && rawLines[0].trim().startsWith('## ')) {
+                subtitle = rawLines[0].trim().substring(3);
+                rawLines.shift(); // Remove subtitle line
+            }
+
+            // JOIN remaining lines for the body
+            body = rawLines.join('\n');
+        } else if (contentData && typeof contentData === 'object') {
+            console.log('Processing object input...');
+            // Fallback: simple destructuring if still needed, but prioritizing string logic
+            title = contentData.title || title;
+            subtitle = contentData.subtitle || subtitle;
+            body = contentData.body || body;
+        }
+
+        console.log('Parsed title:', title);
+        console.log('Parsed subtitle:', subtitle);
+        console.log('Body length:', body.length);
+
+        console.log('Creating PDFDocument...');
+
+        const doc = new PDFDocument({
+            size: 'A4',
+            margins: { top: 130, bottom: 80, left: 50, right: 50 }, // Increased margins for header/footer
+            bufferPages: true
+        });
+
+        const pdfBufferPromise = new Promise((resolve, reject) => {
+            const buffers = [];
+            doc.on('data', (chunk) => buffers.push(chunk));
+            doc.on('end', () => {
+                console.log('PDF stream ended, buffer count:', buffers.length);
+                resolve(Buffer.concat(buffers));
+            });
+            doc.on('error', (err) => {
+                console.error('PDF stream error:', err);
+                reject(err);
+            });
+        });
+
+        // === CONTENT GENERATION ===
+        // Reset y to top margin (handled by margins, but good to ensure start)
+        // doc.y is already at top margin (110)
+
+        if (title) {
+            doc.font('Helvetica-Bold').fontSize(24)
+                .text(title, { align: 'center' });
+            doc.moveDown(1);
+        }
+
+        if (subtitle) {
+            doc.font('Helvetica').fontSize(16).fillColor('#444444')
+                .text(subtitle, { align: 'center' });
+            doc.moveDown(2);
+        }
+
+        doc.fillColor('black').font('Helvetica');
+
+        const lines = (body || "").trim().split('\n');
+
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim();
+            if (!line) {
+                doc.moveDown(0.5);
+                continue;
+            }
+
+            // Headings
+            if (line.startsWith('# ')) {
+                doc.font('Helvetica-Bold').fontSize(22).fillColor('#FF2E8A')
+                    .text(line.substring(2));
+                doc.moveDown(0.5);
+                doc.font('Helvetica').fillColor('black'); // Reset
+            }
+            else if (line.startsWith('## ')) {
+                doc.font('Helvetica-Bold').fontSize(16).fillColor('black') // Slightly larger than body
+                    .text(line.substring(3));
+                doc.moveDown(0.4);
+                doc.font('Helvetica'); // Reset
+            }
+            else if (line.startsWith('### ')) {
+                doc.font('Helvetica-Bold').fontSize(14).fillColor('black')
+                    .text(line.substring(4));
+                doc.moveDown(0.3);
+                doc.font('Helvetica'); // Reset
+            }
+            // List Items
+            else if (line.startsWith('- ') || line.startsWith('* ')) {
+                doc.fontSize(12).list([line.substring(2)], {
+                    bulletRadius: 2,
+                    textIndent: 20,
+                    bulletIndent: 10
+                });
+                doc.moveDown(0.3);
+            }
+            // Normal Paragraphs
+            else {
+                doc.fontSize(12).text(line, {
+                    align: 'left',
+                    lineGap: 4
+                });
+                if (i < lines.length - 1) {
+                    doc.moveDown(0.5);
+                }
+            }
+        }
+
+        // === HEADER & FOOTER (Applied to ALL pages) ===
+        // We do this AFTER content is generated so we know the total page count
+        const range = doc.bufferedPageRange();
+        const headerHeight = 80;
+        const footerHeight = 60;
+        const pinkColor = '#FF2E8A';
+
+        for (let i = range.start; i < range.start + range.count; i++) {
+            doc.switchToPage(i);
+
+            const pageWidth = doc.page.width;
+            const pageHeight = doc.page.height;
+
+            // --- Header ---
+            doc.rect(0, 0, pageWidth, headerHeight).fill(pinkColor);
+
+            // Add text on top of header background
+            doc.fontSize(20).font('Helvetica-Bold').fillColor('white')
+                .text('AI Digital Product Tool', 50, 28, {
+                    width: pageWidth - 100,
+                    align: 'center'
+                });
+
+            // --- Footer ---
+            doc.rect(0, pageHeight - footerHeight, pageWidth, footerHeight).fill(pinkColor);
+
+            // Add text on top of footer background
+            doc.fontSize(10).font('Helvetica').fillColor('white')
+                .text('this product is created with https://www.createaipro.com/', 50, pageHeight - 35, {
+                    width: pageWidth - 100,
+                    align: 'center',
+                    link: 'https://www.createaipro.com/',
+                    underline: false // Optional
+                });
+        }
+
+        doc.end();
+        console.log('PDF document finalized');
+
+        const pdfBuffer = await pdfBufferPromise;
+        console.log('PDF buffer received, size:', pdfBuffer.length, 'bytes');
+
+        if (!pdfBuffer) throw new Error("PDF buffer empty");
+
+        // === UPLOAD TO WIX MEDIA MANAGER ===
+        const fileName = `${(title || 'product').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
+        console.log('Uploading to Media Manager with filename:', fileName);
+
+        const uploadedFile = await mediaManager.upload(
+            "ai-products",                    // Folder name (create in Media Manager)
+            pdfBuffer,
+            fileName,
+            {
+                mediaOptions: { mimeType: "application/pdf" },
+                metadataOptions: { isPrivate: false }
+            }
+        );
+
+        console.log('File uploaded successfully');
+        console.log('Uploaded fileUrl:', uploadedFile.fileUrl);
+
+        // === GET TEMPORARY DOWNLOAD URL (valid 24 hours) ===
+        console.log('Generating download URL...');
+        const downloadUrl = await mediaManager.getDownloadUrl(uploadedFile.fileUrl, 86400); // 24 hours
+        console.log('Download URL generated:', downloadUrl);
+
+        const result = {
+            success: true,
+            downloadUrl: downloadUrl,
+            fileUrl: uploadedFile.fileUrl,
+            fileName: fileName
+        };
+
+        console.log('=== PDF GENERATION SUCCESS ===');
+        console.log('Result:', result);
+        return result;
+
+    } catch (error) {
+        console.error('=== PDF GENERATION FAILED ===');
+        console.error('Error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+
+        return {
+            success: false,
+            error: error.message || "Failed to generate PDF"
+        };
+    }
+}

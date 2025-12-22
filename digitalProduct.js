@@ -4,6 +4,7 @@ import wixData from 'wix-data';
 import wixWindowFrontend from "wix-window-frontend";
 import { currentMember, authentication } from "wix-members-frontend";
 import { orders } from "wix-pricing-plans-frontend";
+import { generatePDF } from "backend/pdfGenerator";
 
 // IMPORTANT: Replace the placeholder IDs below with the actual IDs of your elements.
 const DROPDOWN_PRODUCT_TYPE_ID = "#dropdownProductType";
@@ -14,6 +15,8 @@ const GENERATE_BUTTON_ID = "#generate"; // Assuming the button ID is #generate
 const ERROR_TEXT_ID = "#errorText1"; // ID for the status/error text element
 let dbTemplate = "";
 let dbInstruction = "";
+let fileUrl = "";
+let fileName = "";
 
 // Product-Ready Rules based on requirements
 const PRODUCT_RULES = {
@@ -127,9 +130,32 @@ $w.onReady(async function () {
                 .map(item => ({ label: item, value: item }));
             $w("#wordCount").options = filteredOptions;
         }
+
     }).catch(error => console.error("Error loading Word Counts:", error));
     // --- End of dropdown population logic ---
+    let query = wixData.query("AdminControl");
+    let results1 = await query.find();
 
+    const correctItem = results1.items.find(item =>
+        item.promptTemplateName && item.instruction
+    );
+
+    // Check if an item meeting the criteria was found
+    if (correctItem) {
+        // If found, safely assign the values from that item
+        dbTemplate = correctItem.promptTemplateName;
+        dbInstruction = correctItem.instruction;
+
+        console.log(`Template found at random index: ${dbTemplate}`);
+        console.log(`Instruction found at random index: ${dbInstruction}`);
+
+    } else {
+        // If no item meets the criteria (or array is empty)
+        dbTemplate = "";
+        dbInstruction = "";
+
+        console.log("No suitable item (with both template and instruction) was found.");
+    }
     // Set up click handler
     $w(GENERATE_BUTTON_ID).onClick(onGenerateButtonClick);
 });
@@ -178,29 +204,6 @@ async function onGenerateButtonClick() {
 
     // 2. Query the AdminControl collection for the instruction
     try {
-        let query = wixData.query("AdminControl");
-        let results = await query.find();
-
-        const correctItem = results.items.find(item =>
-            item.promptTemplateName && item.instruction
-        );
-
-        // Check if an item meeting the criteria was found
-        if (correctItem) {
-            // If found, safely assign the values from that item
-            dbTemplate = correctItem.promptTemplateName;
-            dbInstruction = correctItem.instruction;
-
-            console.log(`Template found at random index: ${dbTemplate}`);
-            console.log(`Instruction found at random index: ${dbInstruction}`);
-
-        } else {
-            // If no item meets the criteria (or array is empty)
-            dbTemplate = "";
-            dbInstruction = "";
-
-            console.log("No suitable item (with both template and instruction) was found.");
-        }
 
         // 3. Construct the product-specific rules part of the prompt
         const rules = PRODUCT_RULES[productType];
@@ -208,49 +211,40 @@ async function onGenerateButtonClick() {
 
         if (rules) {
             rulesPrompt = `
-### PRODUCT-READY RULES FOR ${productType.toUpperCase()}:
+### ${productType.toUpperCase()} STRUCTURE:
 - MUST INCLUDE: ${rules.mustInclude.join(", ")}
 - MUST NOT BE: ${rules.mustNotBe.join(", ")}
-- DEFAULT ASSUMPTION: ${rules.defaultAssumption}
-
-### UNIVERSAL PRODUCT-READY CHECKLIST:
-${UNIVERSAL_CHECKLIST.map(item => `- ${item}`).join("\n")}
+- ASSUMPTION: ${rules.defaultAssumption}
             `;
         }
 
-        // 4. Construct the final prompt with a high-priority "System Instruction" block
+        // 4. Construct the slimmed final prompt
         const finalPrompt = `
-### SYSTEM ROLE:
-You are an expert ${productType} creator and professional editor. Your goal is to produce a "READY-TO-SELL" digital product.
-
-### FINAL PRODUCT CRITERIA:
-${UNIVERSAL_CHECKLIST.map(item => `- ${item}`).join("\n")}
-
 ### INSTRUCTIONS:
 ${dbInstruction}
 
 ${rulesPrompt}
 
-### USER-SELECTED PARAMETERS:
-- Product Type: ${productType}
-- Genre/Topic: ${genre}
+### CRITERIA:
+${UNIVERSAL_CHECKLIST.map(item => `- ${item}`).join("\n")}
+
+### PARAMETERS:
+- Product: ${productType}
+- Topic: ${genre}
 - Tone: ${tone}
-- Target Audience: ${targetAudience}
-- Purpose/Goal: ${purposeGoal}
-- Targeted Word Count: ${wordCount}
-- Mandatory Keywords: ${keywords}
-- Additional Notes: ${notes}
+- Audience: ${targetAudience}
+- Goal: ${purposeGoal}
+- Words: ${wordCount}
+- Keywords: ${keywords}
+- Notes: ${notes}
 
-### FINAL OUTPUT REQUIREMENTS:
-1. START IMMEDIATELY with the product title.
-2. DO NOT include any introductory or concluding remarks (e.g., "I hope this helps").
-3. ENSURE the depth of content matches the Word Count: ${wordCount}. If 'Long' or 'Very Long' (if applicable) is selected, provide exhaustive detail.
-4. If the product is a BOOK, it MUST have a chapter-by-chapter structure with at least 5-10 chapters unless otherwise specified.
-5. CHECK all spelling and grammar before outputting.
+### OUTPUT REQUIREMENTS:
+1. START IMMEDIATELY with the title. No intro fluff.
+2. MATCH the Word Count depth: ${wordCount}.
+3. PROOFREAD for perfect grammar.
 
-[PROMPT TEMPLATE START]
+[TEMPLATE]
 ${dbTemplate}
-[PROMPT TEMPLATE END]
 `;
 
         // 5. Call OpenAI
@@ -319,7 +313,10 @@ $w('#copy').onClick(async (event) => {
 $w('#saveReport').onClick(async (event) => {
     let toInsert = {
         memberId: MemberId,
-        report: report
+        report: report,
+        fileUrl: fileUrl,
+        fileName: fileName,
+        generatedDate: new Date()
     }
     await wixData
         .insert("SavedReports", toInsert)
@@ -333,5 +330,71 @@ $w('#saveReport').onClick(async (event) => {
             $w('#errorText2').text = "❌ Report save failed... try again";
             $w('#errorText2').expand();
         });
+});
 
-})
+$w('#downloadProduct').onClick(async (event) => {
+    console.log('=== DOWNLOAD BUTTON CLICKED ===');
+
+    // Basic validation
+    if (!report) {
+        console.log('ERROR: No report available');
+        $w('#errorText2').text = "⚠️ No report available to download. Generate one first.";
+        $w('#errorText2').expand();
+        return;
+    }
+
+    console.log('Report available, length:', report.length);
+    $w('#errorText2').text = "⏳ Generating PDF... Please wait.";
+    $w('#errorText2').expand();
+
+    try {
+        console.log('Calling generatePDF...');
+        console.log('Report:', report);
+        // 1. Generate the PDF
+        const response = await generatePDF(report);
+
+        console.log('=== FULL RESPONSE ===');
+        console.log('Response object:', response);
+        console.log('Response.success:', response.success);
+        console.log('Response.downloadUrl:', response.downloadUrl);
+        console.log('Response.fileUrl:', response.fileUrl);
+        console.log('Response.fileName:', response.fileName);
+        console.log('Response.error:', response.error);
+        console.log('=== END RESPONSE ===');
+
+        if (!response.success) {
+            console.error('Backend returned success=false');
+            throw new Error(response.error || 'Backend generation failed');
+        }
+
+        // 2. Prepare database entry
+        fileUrl = response.fileUrl;
+        fileName = response.fileName;
+        console.log('Stored fileUrl:', fileUrl);
+        console.log('Stored fileName:', fileName);
+
+        // 3. Determine download URL (fallback to fileUrl if missing)
+        const dlUrl = response.downloadUrl || response.fileUrl;
+        console.log('Determined download URL:', dlUrl);
+
+        if (!dlUrl) {
+            console.error('No download URL available!');
+            throw new Error('No download URL returned from backend');
+        }
+
+        // 4. Update UI and Trigger Download
+        console.log('Triggering download to:', dlUrl);
+        $w('#errorText2').text = "✅ PDF Generated! Downloading...";
+        wixLocationFrontend.to(dlUrl);
+        console.log('Download triggered successfully');
+
+    } catch (error) {
+        console.error('=== DOWNLOAD ERROR ===');
+        console.error('Error object:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.error('=== END ERROR ===');
+        $w('#errorText2').text = "❌ PDF Generation failed: " + (error.message || "Try again.");
+        $w('#errorText2').expand();
+    }
+});
