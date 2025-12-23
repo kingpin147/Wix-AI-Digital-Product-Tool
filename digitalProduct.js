@@ -6,13 +6,7 @@ import { currentMember, authentication } from "wix-members-frontend";
 import { orders } from "wix-pricing-plans-frontend";
 import { generatePDF } from "backend/pdfGenerator";
 
-// IMPORTANT: Replace the placeholder IDs below with the actual IDs of your elements.
-const DROPDOWN_PRODUCT_TYPE_ID = "#dropdownProductType";
-const DROPDOWN_GENRE_ID = "#dropdownGenre";
-const DROPDOWN_TONE_ID = "#dropdownTone";
-const DROPDOWN_TARGET_AUDIENCE_ID = "#dropdownTargetAudience";
-const GENERATE_BUTTON_ID = "#generate"; // Assuming the button ID is #generate
-const ERROR_TEXT_ID = "#errorText1"; // ID for the status/error text element
+// Global variables
 let dbTemplate = "";
 let dbInstruction = "";
 let fileUrl = "";
@@ -69,72 +63,135 @@ let MemberId = null;
 let report = null;
 
 $w.onReady(async function () {
+    console.log('========================================');
+    console.log('🚀 PAGE READY - Starting initialization');
+    console.log('========================================');
+
+   
+
+    console.log('\n🔐 Checking authentication status...');
     // Collapse sections and error text on initial load
     // Check for member and active orders
     if (authentication.loggedIn()) {
         try {
+            console.log('  → Fetching member details...');
             const member = await currentMember.getMember(options);
             MemberId = member._id;
-            console.log("Member ID:", MemberId);
+            console.log("  ✅ Member ID:", MemberId);
 
             // Check orders for active membership
+            console.log('\n📦 Checking membership status...');
             if (wixWindowFrontend.viewMode === 'Site') {
+                console.log('  → Site mode: Checking orders...');
                 const ordersList = await orders.listCurrentMemberOrders();
+                console.log('  → Orders found:', ordersList.length);
                 const hasActiveMembership = ordersList.some(order => order.status === "ACTIVE");
 
                 if (!hasActiveMembership) {
-                    console.log("No active membership found. Redirecting to /pricing-plans...");
+                    console.log("  ❌ No active membership found. Redirecting to /pricing-plans...");
                     wixLocationFrontend.to("/pricing-plans");
                 } else {
-                    console.log("Active membership confirmed.");
+                    console.log("  ✅ Active membership confirmed.");
                 }
             } else {
-                console.log("Preview mode: Skipping membership check.");
+                console.log("  ⚠️ Preview mode: Skipping membership check.");
             }
         } catch (error) {
-            console.error("Error checking membership details:", error);
+            console.error("  ❌ Error checking membership details:", error);
         }
     } else {
-        console.log("Member is not logged in. Redirecting to login...");
+        console.log("  ❌ Member is not logged in. Redirecting to login...");
         authentication.promptLogin();
     }
 
+    console.log('\n🎨 Setting up UI elements...');
     $w("#reportSection").collapse();
-    $w(ERROR_TEXT_ID).collapse(); // Collapse error text on load
+    $w("#errorText1").collapse(); // Collapse error text on load
+    console.log('  ✅ Report section collapsed');
+    console.log('  ✅ Error text collapsed');
 
-    // --- Dropdown Population Logic (omitted for brevity, assume it's correct) ---
-    // ... (Your dropdown population code) ...
+    // --- Dropdown Population Logic ---
+    console.log('\n📊 Loading dropdown data from database...');
+    console.log('  → Query: AdminControl.distinct("productType")');
     await wixData.query("AdminControl").distinct("productType").then(results => {
-        if (results.items.length > 0) $w(DROPDOWN_PRODUCT_TYPE_ID).options = results.items.map(item => ({ label: item, value: item }));
-    }).catch(error => console.error("Error loading Product Types:", error));
+        console.log('  ✅ Product Types loaded:', results.items.length, 'items');
+        console.log('    Items:', results.items);
+        if (results.items.length > 0) {
+            $w("#dropdownProductType").options = results.items.map(item => ({ label: item, value: item }));
+            console.log('  ✅ Product Type dropdown populated');
+        } else {
+            console.log('  ⚠️ No Product Types found in database');
+        }
+    }).catch(error => console.error("  ❌ Error loading Product Types:", error));
 
+    console.log('  → Query: AdminControl.distinct("genre")');
     await wixData.query("AdminControl").distinct("genre").then(results => {
-        if (results.items.length > 0) $w(DROPDOWN_GENRE_ID).options = results.items.map(item => ({ label: item, value: item }));
-    }).catch(error => console.error("Error loading Genres:", error));
+        console.log('  ✅ Genres loaded:', results.items.length, 'items');
+        console.log('    Items:', results.items);
+        if (results.items.length > 0) {
+            $w("#dropdownGenre").options = results.items.map(item => ({ label: item, value: item }));
+            console.log('  ✅ Genre dropdown populated');
+        } else {
+            console.log('  ⚠️ No Genres found in database');
+        }
+    }).catch(error => console.error("  ❌ Error loading Genres:", error));
 
+    console.log('  → Query: AdminControl.distinct("tone")');
     await wixData.query("AdminControl").distinct("tone").then(results => {
-        if (results.items.length > 0) $w(DROPDOWN_TONE_ID).options = results.items.map(item => ({ label: item, value: item }));
-    }).catch(error => console.error("Error loading Tones:", error));
+        console.log('  ✅ Tones loaded:', results.items.length, 'items');
+        console.log('    Items:', results.items);
+        if (results.items.length > 0) {
+            $w("#dropdownTone").options = results.items.map(item => ({ label: item, value: item }));
+            console.log('  ✅ Tone dropdown populated');
+        } else {
+            console.log('  ⚠️ No Tones found in database');
+        }
+    }).catch(error => console.error("  ❌ Error loading Tones:", error));
 
+    console.log('  → Query: AdminControl.distinct("targetAudience")');
     await wixData.query("AdminControl").distinct("targetAudience").then(results => {
-        if (results.items.length > 0) $w(DROPDOWN_TARGET_AUDIENCE_ID).options = results.items.map(item => ({ label: item, value: item }));
-    }).catch(error => console.error("Error loading Target Audiences:", error));
+        console.log('  ✅ Target Audiences loaded:', results.items.length, 'items');
+        console.log('    Items:', results.items);
+        if (results.items.length > 0) {
+            $w("#dropdownTargetAudience").options = results.items.map(item => ({ label: item, value: item }));
+            console.log('  ✅ Target Audience dropdown populated');
+        } else {
+            console.log('  ⚠️ No Target Audiences found in database');
+        }
+    }).catch(error => console.error("  ❌ Error loading Target Audiences:", error));
+    console.log('  → Query: AdminControl.distinct("purposeGoal")');
     await wixData.query("AdminControl").distinct("purposeGoal").then(results => {
-        if (results.items.length > 0) $w("#purpose").options = results.items.map(item => ({ label: item, value: item }));
-    }).catch(error => console.error("Error loading Target Audiences:", error));
+        console.log('  ✅ Purpose/Goals loaded:', results.items.length, 'items');
+        console.log('    Items:', results.items);
+        if (results.items.length > 0) {
+            $w("#purpose").options = results.items.map(item => ({ label: item, value: item }));
+            console.log('  ✅ Purpose dropdown populated');
+        } else {
+            console.log('  ⚠️ No Purpose/Goals found in database');
+        }
+    }).catch(error => console.error("  ❌ Error loading Purpose/Goals:", error));
+    console.log('  → Query: AdminControl.distinct("wordCount")');
     await wixData.query("AdminControl").distinct("wordCount").then(results => {
+        console.log('  ✅ Word Counts loaded:', results.items.length, 'items');
+        console.log('    Items:', results.items);
         if (results.items.length > 0) {
             // Filter out "Very Long" for Beta phase
             const filteredOptions = results.items
                 .filter(item => !item.includes("Very Long"))
                 .map(item => ({ label: item, value: item }));
+            console.log('    Filtered to:', filteredOptions.length, 'items (removed "Very Long")');
             $w("#wordCount").options = filteredOptions;
+            console.log('  ✅ Word Count dropdown populated');
+        } else {
+            console.log('  ⚠️ No Word Counts found in database');
         }
 
-    }).catch(error => console.error("Error loading Word Counts:", error));
-    // --- End of dropdown population logic ---
+    }).catch(error => console.error("  ❌ Error loading Word Counts:", error));
+    console.log('\n📚 Loading database instructions and templates...');
+    console.log('  → Query: AdminControl.find()');
     let query = wixData.query("AdminControl");
     let results1 = await query.find();
+    console.log('  ✅ Query completed. Total items found:', results1.items.length);
 
     const correctItem = results1.items.find(item =>
         item.promptTemplateName && item.instruction
@@ -146,18 +203,37 @@ $w.onReady(async function () {
         dbTemplate = correctItem.promptTemplateName;
         dbInstruction = correctItem.instruction;
 
-        console.log(`Template found at random index: ${dbTemplate}`);
-        console.log(`Instruction found at random index: ${dbInstruction}`);
+        console.log('  ✅ Template and Instruction loaded successfully!');
+        console.log('    → Template preview:', dbTemplate.substring(0, 100) + '...');
+        console.log('    → Template length:', dbTemplate.length, 'characters');
+        console.log('    → Instruction preview:', dbInstruction.substring(0, 100) + '...');
+        console.log('    → Instruction length:', dbInstruction.length, 'characters');
 
     } else {
         // If no item meets the criteria (or array is empty)
         dbTemplate = "";
         dbInstruction = "";
 
-        console.log("No suitable item (with both template and instruction) was found.");
+        console.log('  ⚠️ No suitable item (with both template and instruction) was found.');
+        console.log('    → dbTemplate is EMPTY');
+        console.log('    → dbInstruction is EMPTY');
     }
+
     // Set up click handler
-    $w(GENERATE_BUTTON_ID).onClick(onGenerateButtonClick);
+    console.log('\n🔧 Setting up event handlers...');
+    $w("#generate").onClick(onGenerateButtonClick);
+    console.log('  ✅ Generate button click handler attached');
+
+    console.log('\n========================================');
+    console.log('✅ INITIALIZATION COMPLETE');
+    console.log('========================================');
+    console.log('Summary:');
+    console.log('  - Elements: Ready');
+    console.log('  - Dropdowns: Populated');
+    console.log('  - DB Template:', dbTemplate ? 'Loaded (' + dbTemplate.length + ' chars)' : 'EMPTY');
+    console.log('  - DB Instruction:', dbInstruction ? 'Loaded (' + dbInstruction.length + ' chars)' : 'EMPTY');
+    console.log('  - Event handlers: Attached');
+    console.log('========================================\n');
 });
 
 /**
@@ -165,10 +241,10 @@ $w.onReady(async function () {
  */
 async function onGenerateButtonClick() {
     // 1. Get selected values from dropdowns and user input
-    const productType = $w(DROPDOWN_PRODUCT_TYPE_ID).value;
-    const genre = $w(DROPDOWN_GENRE_ID).value;
-    const tone = $w(DROPDOWN_TONE_ID).value;
-    const targetAudience = $w(DROPDOWN_TARGET_AUDIENCE_ID).value;
+    const productType = $w("#dropdownProductType").value;
+    const genre = $w("#dropdownGenre").value;
+    const tone = $w("#dropdownTone").value;
+    const targetAudience = $w("#dropdownTargetAudience").value;
     const purposeGoal = $w("#purpose").value;
     const wordCount = $w("#wordCount").value;
 
@@ -180,25 +256,25 @@ async function onGenerateButtonClick() {
     const notes = $w("#notesTextArea").value || "";
 
     // Collapse any previous error/status message
-    $w(ERROR_TEXT_ID).collapse();
+    $w("#errorText1").collapse();
 
     // Basic validation
     if (!productType || !genre || !tone || !targetAudience || !purposeGoal || !wordCount) {
         console.log("Please select a value for all dropdowns.");
-        $w(ERROR_TEXT_ID).text = "🛑 Please select a value for all dropdowns.";
-        $w(ERROR_TEXT_ID).expand();
+        $w("#errorText1").text = "🛑 Please select a value for all dropdowns.";
+        $w("#errorText1").expand();
         return;
     }
 
     // --- Show Status: "Generating Report" ---
-    $w(ERROR_TEXT_ID).text = "🤖 Generating report... Please wait.";
-    $w(ERROR_TEXT_ID).expand();
-    $w(GENERATE_BUTTON_ID).disable(); // Disable button while processing
+    $w("#errorText1").text = "🤖 Generating report... Please wait.";
+    $w("#errorText1").expand();
+    $w("#generate").disable(); // Disable button while processing
 
     // BETA RESTRICTION: Check for Book
     if (productType === "Book") {
-        $w(ERROR_TEXT_ID).text = "🚧 'Full Book' is held for Post-Beta. Please select another product type.";
-        $w(GENERATE_BUTTON_ID).enable();
+        $w("#errorText1").text = "🚧 'Full Book' is held for Post-Beta. Please select another product type.";
+        $w("#generate").enable();
         return;
     }
 
@@ -252,9 +328,9 @@ ${dbTemplate}
 
     } catch (error) {
         console.error("Error during generation process:", error);
-        $w(ERROR_TEXT_ID).text = "⚠️ An error occurred while fetching instructions from the database.";
-        $w(ERROR_TEXT_ID).expand(); // Keep error visible
-        $w(GENERATE_BUTTON_ID).enable(); // Re-enable button
+        $w("#errorText1").text = "⚠️ An error occurred while fetching instructions from the database.";
+        $w("#errorText1").expand(); // Keep error visible
+        $w("#generate").enable(); // Re-enable button
     }
 }
 
@@ -272,14 +348,14 @@ async function sendToOpenAI(prompt) {
         $w("#formSection").collapse();
 
         // --- Action 1: Collapse status text after success ---
-        $w(ERROR_TEXT_ID).collapse();
+        $w("#errorText1").collapse();
 
     } catch (error) {
         console.error("Failed to get response from OpenAI:", error);
-        $w(ERROR_TEXT_ID).text = "❌ Failed to generate report. Please check the backend service.";
-        $w(ERROR_TEXT_ID).expand(); // Show error
+        $w("#errorText1").text = "❌ Failed to generate report. Please check the backend service.";
+        $w("#errorText1").expand(); // Show error
     } finally {
-        $w(GENERATE_BUTTON_ID).enable(); // Re-enable button regardless of success/fail
+        $w("#generate").enable(); // Re-enable button regardless of success/fail
     }
 }
 
@@ -289,7 +365,7 @@ $w('#generateAgain').onClick((event) => {
     $w("#reportOutput").text = " ";
 
     // --- Action 2: Collapse error text when trying again ---
-    $w(ERROR_TEXT_ID).collapse();
+    $w("#errorText1").collapse();
     $w('#errorText2').collapse();
 })
 

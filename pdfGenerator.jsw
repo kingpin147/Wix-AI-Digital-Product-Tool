@@ -2,7 +2,7 @@ import { mediaManager } from 'wix-media-backend';
 import PDFDocument from 'pdfkit';
 
 export async function generatePDF(contentData) {
-    console.log('=== PDF GENERATION STARTED ===');
+    console.log('=== PDF GENERATION START (v1.1) ===');
     console.log('Input type:', typeof contentData);
     console.log('Input length:', contentData ? contentData.length : 0);
 
@@ -44,10 +44,59 @@ export async function generatePDF(contentData) {
 
         console.log('Creating PDFDocument...');
 
+        // Helper function to draw header and footer on current page
+        const drawHeaderFooter = (pageIndex) => {
+            if (pageIndex !== undefined) {
+                doc.switchToPage(pageIndex);
+            }
+            console.log(`[v1.2] Drawing header/footer on page index: ${pageIndex}`);
+
+            const pageWidth = doc.page.width;
+            const pageHeight = doc.page.height;
+            const headerHeight = 80;
+            const footerHeight = 60;
+            const pinkColor = '#FF2E8A';
+
+            // Save state to avoid interfering with content
+            doc.save();
+
+            // Reset margins temporarily for header/footer drawing
+            // This is the CRITICAL fix for the infinite recursion
+            const originalMargins = { ...doc.page.margins };
+            doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
+
+            // --- Draw Header ---
+            doc.rect(0, 0, pageWidth, headerHeight).fill(pinkColor);
+            doc.fillColor('white').font('Helvetica-Bold').fontSize(20)
+                .text('AI Digital Product Tool', 0, 28, {
+                    width: pageWidth,
+                    align: 'center'
+                });
+
+            // --- Draw Footer ---
+            doc.rect(0, pageHeight - footerHeight, pageWidth, footerHeight).fill(pinkColor);
+            doc.fillColor('white').font('Helvetica').fontSize(10)
+                .text(
+                    'this product is created with https://www.createaipro.com/',
+                    0,
+                    pageHeight - 40,
+                    {
+                        width: pageWidth,
+                        align: 'center',
+                        link: 'https://www.createaipro.com/'
+                    }
+                );
+
+            // Restore margins and state
+            doc.page.margins = originalMargins;
+            doc.restore();
+        };
+
         const doc = new PDFDocument({
             size: 'A4',
-            margins: { top: 130, bottom: 80, left: 50, right: 50 }, // Increased margins for header/footer
-            bufferPages: true
+            margins: { top: 130, bottom: 80, left: 50, right: 50 },
+            bufferPages: true, // Use buffering to apply headers/footers at the end
+            autoFirstPage: true
         });
 
         const pdfBufferPromise = new Promise((resolve, reject) => {
@@ -63,9 +112,13 @@ export async function generatePDF(contentData) {
             });
         });
 
+        // We will apply headers/footers at the end using the buffered pages
+        // to ensure we don't trigger the infinite call stack error during generation.
+
         // === CONTENT GENERATION ===
-        // Reset y to top margin (handled by margins, but good to ensure start)
-        // doc.y is already at top margin (110)
+        
+        // Track if we've actually added content to prevent blank pages
+        let lastContentY = doc.y;
 
         if (title) {
             doc.font('Helvetica-Bold').fontSize(24)
@@ -89,25 +142,28 @@ export async function generatePDF(contentData) {
                 doc.moveDown(0.5);
                 continue;
             }
-
+            
             // Headings
             if (line.startsWith('# ')) {
                 doc.font('Helvetica-Bold').fontSize(22).fillColor('#FF2E8A')
                     .text(line.substring(2));
                 doc.moveDown(0.5);
                 doc.font('Helvetica').fillColor('black'); // Reset
+                lastContentY = doc.y;
             }
             else if (line.startsWith('## ')) {
                 doc.font('Helvetica-Bold').fontSize(16).fillColor('black') // Slightly larger than body
                     .text(line.substring(3));
                 doc.moveDown(0.4);
                 doc.font('Helvetica'); // Reset
+                lastContentY = doc.y;
             }
             else if (line.startsWith('### ')) {
                 doc.font('Helvetica-Bold').fontSize(14).fillColor('black')
                     .text(line.substring(4));
                 doc.moveDown(0.3);
                 doc.font('Helvetica'); // Reset
+                lastContentY = doc.y;
             }
             // List Items
             else if (line.startsWith('- ') || line.startsWith('* ')) {
@@ -117,6 +173,7 @@ export async function generatePDF(contentData) {
                     bulletIndent: 10
                 });
                 doc.moveDown(0.3);
+                lastContentY = doc.y;
             }
             // Normal Paragraphs
             else {
@@ -127,44 +184,22 @@ export async function generatePDF(contentData) {
                 if (i < lines.length - 1) {
                     doc.moveDown(0.5);
                 }
+                lastContentY = doc.y;
             }
         }
-
-        // === HEADER & FOOTER (Applied to ALL pages) ===
-        // We do this AFTER content is generated so we know the total page count
+        
+        // Log the final content position
+        console.log('Content ended at Y position:', lastContentY);
+        
+        // === APPLY HEADERS & FOOTERS AT THE END ===
         const range = doc.bufferedPageRange();
-        const headerHeight = 80;
-        const footerHeight = 60;
-        const pinkColor = '#FF2E8A';
+        console.log(`[v1.2] Finalizing PDF. Total pages: ${range.count}`);
 
         for (let i = range.start; i < range.start + range.count; i++) {
-            doc.switchToPage(i);
-
-            const pageWidth = doc.page.width;
-            const pageHeight = doc.page.height;
-
-            // --- Header ---
-            doc.rect(0, 0, pageWidth, headerHeight).fill(pinkColor);
-
-            // Add text on top of header background
-            doc.fontSize(20).font('Helvetica-Bold').fillColor('white')
-                .text('AI Digital Product Tool', 50, 28, {
-                    width: pageWidth - 100,
-                    align: 'center'
-                });
-
-            // --- Footer ---
-            doc.rect(0, pageHeight - footerHeight, pageWidth, footerHeight).fill(pinkColor);
-
-            // Add text on top of footer background
-            doc.fontSize(10).font('Helvetica').fillColor('white')
-                .text('this product is created with https://www.createaipro.com/', 50, pageHeight - 35, {
-                    width: pageWidth - 100,
-                    align: 'center',
-                    link: 'https://www.createaipro.com/',
-                    underline: false // Optional
-                });
+            drawHeaderFooter(i);
         }
+
+        console.log('[v1.2] PDF generation complete, finalizing document...');
 
         doc.end();
         console.log('PDF document finalized');
