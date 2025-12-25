@@ -14,11 +14,23 @@ let fileName = "";
 
 // Product-Ready Rules based on requirements
 const PRODUCT_RULES = {
+    "Lead Magnet – Downloadable": {
+        mustInclude: ["Catchy Title", "Executive Summary", "Checklist/Action Plan", "Key Resource Steps", "Call-to-Action"],
+        mustNotBe: ["Blog post", "Simple article", "Unstructured notes"],
+        defaultAssumption: "A multi-page PDF resource that provides immediate value and is ready for download.",
+        structuralRequirement: "Use clear section headers (# for Title, ## for Sections). Incorporate checklists and bullet points. Focus on 'Download-Ready' structure."
+    },
     "Lead Magnet": {
         mustInclude: ["Clear Title", "Brief Welcome/Introduction", "Actionable Framework (checklist, steps, tips, or short guide)", "Reflection or Action Section", "Clear Call-to-Action (CTA)"],
         mustNotBe: ["Blog post", "Generic informational article", "Academic explanation"],
         defaultAssumption: "1-3 pages, high-value downloadable resource.",
         structuralRequirement: "Use bullet points and bold headers for scanability."
+    },
+    "Checklist / Cheat Sheet": {
+        mustInclude: ["Goal-Driven Title", "Pre-flight Requirements", "Numbered Step-by-Step Task List", "Success Metric", "Quick Tip Section"],
+        mustNotBe: ["Paragraph heavy content", "Theoretical explanation"],
+        defaultAssumption: "A one-page reference tool for quick execution.",
+        structuralRequirement: "Highly concise. Use checklist format. Minimal fluff."
     },
     "Lesson Plan": {
         mustInclude: ["Lesson Title", "Target Audience/Level", "Learning Objectives", "Materials Needed", "Step-by-Step Instruction Guide", "Activities & Exercises", "Assessment/Outcomes"],
@@ -38,6 +50,12 @@ const PRODUCT_RULES = {
         defaultAssumption: "Comprehensive structural map for a multi-week training program.",
         structuralRequirement: "Logical progression from beginner to advanced concepts."
     },
+    "Page Section / Copy": {
+        mustInclude: ["Sub-headline", "Body Text", "Key Highlight/Benefit", "Transition to next section"],
+        mustNotBe: ["Full book", "Intro-only content"],
+        defaultAssumption: "A high-impact section intended for a larger webpage or document.",
+        structuralRequirement: "Focus on readability and conversion. Use concise paragraphs and bold highlights."
+    },
     "Book": {
         mustInclude: ["COMING SOON"],
         mustNotBe: ["Any output"],
@@ -55,6 +73,24 @@ const UNIVERSAL_CHECKLIST = [
     "No Meta-Talk: Do not include 'Here is your product' or conversational filler",
     "Word Count Adherence: Meet or exceed the targeted word count with meaningful content"
 ];
+
+function getRulesForProduct(type) {
+    if (!type) return null;
+
+    // Exact match
+    if (PRODUCT_RULES[type]) return PRODUCT_RULES[type];
+
+    // Partial matches
+    if (type.includes("Lead Magnet")) return PRODUCT_RULES["Lead Magnet – Downloadable"];
+    if (type.includes("Worksheet") || type.includes("Workbook")) return PRODUCT_RULES["Workbook / Worksheet"];
+    if (type.includes("Checklist")) return PRODUCT_RULES["Checklist / Cheat Sheet"];
+    if (type.includes("Lesson")) return PRODUCT_RULES["Lesson Plan"];
+    if (type.includes("Outline")) return PRODUCT_RULES["Course Outline"];
+    if (type.includes("Section") || type.includes("Copy")) return PRODUCT_RULES["Page Section / Copy"];
+
+    return null;
+}
+
 
 let options = {
     fieldsets: ['FULL']
@@ -257,7 +293,7 @@ async function onGenerateButtonClick() {
         const instructions = `productTemplate = ${dbTemplate} - productInstruction = ${dbInstruction} , `;
 
         // 4. Construct the product-specific rules part of the prompt
-        const rules = PRODUCT_RULES[productType];
+        const rules = getRulesForProduct(productType);
         let rulesPrompt = "";
 
         if (rules) {
@@ -266,30 +302,44 @@ async function onGenerateButtonClick() {
 - MUST INCLUDE: ${rules.mustInclude.join(", ")}
 - MUST NOT BE: ${rules.mustNotBe.join(", ")}
 - ASSUMPTION: ${rules.defaultAssumption}
+- FORMATTING: ${rules.structuralRequirement}
+            `;
+        } else {
+            // Default rules if type is novel
+            rulesPrompt = `
+### ${productType.toUpperCase()} STRUCTURE:
+- FORMATTING: Use professional headers and structured bullet points.
+- GOAL: Provide a high-value, actionable ${productType}.
             `;
         }
 
-        // 5. Construct the slimmed final prompt (removed dbInstruction and dbTemplate)
+        // 5. Construct the final prompt with explicit instructions for file-ready output
         const finalPrompt = `
+YOU ARE CREATING A PROFESSIONALLY FORMATTED ${productType.toUpperCase()}.
+
 ${rulesPrompt}
 
 ### CRITERIA:
 ${UNIVERSAL_CHECKLIST.map(item => `- ${item}`).join("\n")}
 
 ### PARAMETERS:
-- Product: ${productType}
-- Topic: ${genre}
-- Tone: ${tone}
-- Audience: ${targetAudience}
-- Goal: ${purposeGoal}
-- Words: ${wordCount}
-- Keywords: ${keywords}
-- Notes: ${notes}
+- Product Type: ${productType}
+- Subject/Topic: ${genre}
+- Professional Tone: ${tone}
+- Ideal Audience: ${targetAudience}
+- Ultimate Goal: ${purposeGoal}
+- Targeted Depth: ${wordCount} words
+- Keywords to include: ${keywords}
+- Additional Context/Notes: ${notes}
 
-### OUTPUT REQUIREMENTS:
-1. START IMMEDIATELY with the title. No intro fluff.
-2. MATCH the Word Count depth: ${wordCount}.
-3. PROOFREAD for perfect grammar.
+### FORMATTING INSTRUCTIONS FOR PDF GENERATION:
+1. USE MARKDOWN: Use # for the main title, ## for major sections, and ### for subsections.
+2. LISTS: Use bullet points (- ) or numbered lists (1. ) for checklists and action steps.
+3. NO CHAT: Start immediately with the product content. No conversational filler like "Sure, here is your product."
+4. STRUCTURE: Organize the content to be visually clean and logical for a PDF document.
+5. DEPTH: Ensure the content matches the requested word count of ${wordCount}.
+
+START GENERATING THE ${productType.toUpperCase()} NOW:
 `;
 
         // 5. Call OpenAI with both prompt and instructions
@@ -318,6 +368,25 @@ async function sendToOpenAI(prompt, instructions) {
 
         // --- Action 1: Collapse status text after success ---
         $w("#errorText1").collapse();
+
+        // --- NEW: Automatically Prepare PDF ---
+        $w('#errorText2').text = "✨ Content generated! Preparing your downloadable file...";
+        $w('#errorText2').expand();
+
+        try {
+            const response = await generatePDF(report);
+            if (response.success) {
+                fileUrl = response.fileUrl;
+                fileName = response.fileName;
+                $w('#errorText2').text = "✅ Your product and download file are ready!";
+            } else {
+                console.error("PDF preparation failed:", response.error);
+                $w('#errorText2').text = "⚠️ Content ready, but PDF preparation failed. You can still copy the text.";
+            }
+        } catch (pdfErr) {
+            console.error("PDF preparation error:", pdfErr);
+            $w('#errorText2').text = "⚠️ Note: PDF could not be pre-generated. Click download to try again.";
+        }
 
     } catch (error) {
         console.error("Failed to get response from OpenAI:", error);
@@ -356,6 +425,10 @@ $w('#copy').onClick(async (event) => {
 })
 
 $w('#saveReport').onClick(async (event) => {
+    $w('#saveReport').disable();
+    $w('#errorText2').text = "💾 Saving to your dashboard...";
+    $w('#errorText2').expand();
+
     let toInsert = {
         memberId: MemberId,
         report: report,
@@ -366,79 +439,53 @@ $w('#saveReport').onClick(async (event) => {
     await wixData
         .insert("SavedReports", toInsert)
         .then((item) => {
-            console.log(item); //see item below
-            $w('#errorText2').text = "✅ Report Successfully Saved";
+            console.log("Saved item:", item);
+            $w('#errorText2').text = "✅ Product Successfully Saved to your Dashboard!";
             $w('#errorText2').expand();
+            // We keep the text visible so they can still read/copy/download it.
+            // But we change the button to show it's done.
+            $w('#saveReport').label = "Saved!";
         })
         .catch((err) => {
-            console.log(err);
+            console.error("Save error:", err);
             $w('#errorText2').text = "❌ Report save failed... try again";
             $w('#errorText2').expand();
+            $w('#saveReport').enable();
         });
 });
 
 $w('#downloadProduct').onClick(async (event) => {
     console.log('=== DOWNLOAD BUTTON CLICKED ===');
 
-    // Basic validation
     if (!report) {
-        console.log('ERROR: No report available');
-        $w('#errorText2').text = "⚠️ No report available to download. Generate one first.";
+        $w('#errorText2').text = "⚠️ No content available to download.";
         $w('#errorText2').expand();
         return;
     }
 
-    console.log('Report available, length:', report.length);
+    // If we already have a fileUrl (pre-generated), use it!
+    if (fileUrl) {
+        console.log('Using pre-generated fileUrl:', fileUrl);
+        $w('#errorText2').text = "✅ Downloading your file...";
+        wixLocationFrontend.to(fileUrl);
+        return;
+    }
+
     $w('#errorText2').text = "⏳ Generating PDF... Please wait.";
     $w('#errorText2').expand();
 
     try {
-        console.log('Calling generatePDF...');
-        console.log('Report:', report);
-        // 1. Generate the PDF
         const response = await generatePDF(report);
+        if (!response.success) throw new Error(response.error);
 
-        console.log('=== FULL RESPONSE ===');
-        console.log('Response object:', response);
-        console.log('Response.success:', response.success);
-        console.log('Response.downloadUrl:', response.downloadUrl);
-        console.log('Response.fileUrl:', response.fileUrl);
-        console.log('Response.fileName:', response.fileName);
-        console.log('Response.error:', response.error);
-        console.log('=== END RESPONSE ===');
-
-        if (!response.success) {
-            console.error('Backend returned success=false');
-            throw new Error(response.error || 'Backend generation failed');
-        }
-
-        // 2. Prepare database entry
         fileUrl = response.fileUrl;
         fileName = response.fileName;
-        console.log('Stored fileUrl:', fileUrl);
-        console.log('Stored fileName:', fileName);
 
-        // 3. Determine download URL (fallback to fileUrl if missing)
-        const dlUrl = response.downloadUrl || response.fileUrl;
-        console.log('Determined download URL:', dlUrl);
-
-        if (!dlUrl) {
-            console.error('No download URL available!');
-            throw new Error('No download URL returned from backend');
-        }
-
-        // 4. Update UI and Trigger Download
-        console.log('Triggering download to:', dlUrl);
         $w('#errorText2').text = "✅ PDF Generated! Downloading...";
-        wixLocationFrontend.to(dlUrl);
-        console.log('Download triggered successfully');
+        wixLocationFrontend.to(response.downloadUrl || response.fileUrl);
 
     } catch (error) {
-        console.error('=== DOWNLOAD ERROR ===');
-        console.error('Error object:', error);
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
-        console.error('=== END ERROR ===');
+        console.error('Download error:', error);
         $w('#errorText2').text = "❌ PDF Generation failed: " + (error.message || "Try again.");
         $w('#errorText2').expand();
     }

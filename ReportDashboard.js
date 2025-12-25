@@ -57,7 +57,7 @@ $w.onReady(async function () {
             if (itemData._id === "no-reports") {
                 // Style the "no reports" message differently (optional)
                 $item("#reportText").text = itemData.report;
-                       } else {
+            } else {
                 $item("#reportText").text = itemData.report || "";
             }
         });

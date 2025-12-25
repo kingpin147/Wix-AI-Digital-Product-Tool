@@ -1,56 +1,57 @@
 # Wix AI Digital Product Tool
 
-This project is a Wix Velo (formerly Corvid) application designed to generate AI-powered digital product content (such as ebooks, guides, and plans). It integrates OpenAI's GPT-4o model to create tailored content based on detailed user inputs.
+This project is a Wix Velo (formerly Corvid) application designed to generate AI-powered digital product content (ebooks, guides, checklists, etc.). It integrates OpenAI's high-performance models to create tailored, file-ready assets based on detailed user inputs.
 
-## Features
+## 🚀 Key Features
 
--   **AI Content Generation**: Generates comprehensive reports/products based on user-selected parameters.
--   **Customizable Inputs**: Users can select:
-    -   Product Type
-    -   Genre
-    -   Tone
-    -   Target Audience
-    -   Purpose/Goal
-    -   Word Count
-    -   Custom Keywords and Notes
--   **Membership Gating**: Restricted access to logged-in users with an active pricing plan.
--   **Admin Control**: Uses a database collection (`AdminControl`) to manage prompt templates and instructions dynamically without changing code.
--   **Save & History**: Users can save generated reports to their profile and view them later via a dedicated dashboard.
--   **Copy to Clipboard**: One-click functionality to copy generated content.
+-   **Dynamic AI Content Generation**: Generates comprehensive, high-quality products using advanced reasoning models.
+-   **Product-Specific Logic**: Tailored prompt instructions for different formats:
+    -   **Lead Magnet – Downloadable**: Structured for multi-page PDF value.
+    -   **Workbooks & Worksheets**: Interactive exercises and reflection points.
+    -   **Checklists & Cheat Sheets**: Action-oriented, concise steps.
+    -   **Lesson Plans & Course Outlines**: Formal educational structures.
+    -   **Page Sections & Copy**: High-impact marketing snippets.
+-   **Instant PDF Conversion**: Automatically converts generated text into a professionally formatted PDF document.
+-   **Professional Formatting**: Uses Markdown parsing and PDFKit to create stylized headers, bulleted lists, and clean layouts.
+-   **Branded Experience**: Integrated headers and footers in every generated PDF with custom links.
+-   **Membership Gating**: Secure access for subscribers via Wix Pricing Plans integration.
+-   **Save & History Dashboard**: Users can save products to their profile, including the generated text and the download link.
+-   **One-Click Actions**: Integrated "Download PDF", "Save to Dashboard", and "Copy to Clipboard" functionality.
 
-## Project Structure
+## 📂 Project Structure
 
--   **`digitalProduct.js`**: Main frontend logic for the generation page. Handles user inputs, validation, API calls to the backend, and UI state management.
--   **`backend/openAi.jsw`**: Backend module that securely handles OpenAI API requests. Retreives the API key from Wix Secrets Manager.
--   **`ReportDashboard.js`**: Frontend logic for the user's dashboard, displaying their personal history of saved reports.
+-   **`digitalProduct.js`**: Core frontend logic for the generation interface. Manages the multi-step flow: Input -> OpenAI Call -> UI Display -> PDF Preparation.
+-   **`backend/openAi.jsw`**: Secure backend module for OpenAI API interactions using the newest "Responses API" format.
+-   **`backend/pdfGenerator.jsw`**: Backend service that uses **PDFKit** to transform text/markdown into PDF files and uploads them to the Wix Media Manager.
+-   **`ReportDashboard.js`**: Frontend logic for the user's personal hub, allowing them to access and download previously generated products.
 
-## Setup & Configuration
+## ⚙️ Setup & Configuration
 
 ### Prerequisites
-1.  **Wix Site**: A Wix website with Dev Mode enabled.
-2.  **OpenAI API Key**: A valid API key from OpenAI.
+1.  **Wix Site**: Dev Mode enabled.
+2.  **OpenAI API Key**: Stored in Wix Secrets Manager as `OPENAI_KEY`.
+3.  **Packages**: `pdfkit` must be installed in the backend via NPM.
 
-### Installation
+### Database Collections
+-   **`AdminControl`**: Configures the "brain" of the tool (templates, instructions, and dropdown options).
+-   **`SavedReports`**: Stores historical data.
+    -   `memberId` (Reference/ID)
+    -   `report` (Rich Text)
+    -   `fileUrl` (URL to the generated PDF)
+    -   `fileName` (Reference name)
+    -   `generatedDate` (Date)
 
-1.  **Database Collections**:
-    -   **`AdminControl`**: Must contain items with `promptTemplateName`, `instruction`, and dropdown options (`productType`, `genre`, etc.).
-    -   **`SavedReports`**: Stores user reports. Fields: `memberId` (Reference/String), `report` (Rich Text/Long Text).
-    -   **Pricing Plans**: Set up Wix Pricing Plans app and verify the "ACTIVE" status logic in `digitalProduct.js`.
-
-2.  **Secrets Manager**:
-    -   Store your OpenAI API key in the Wix Secrets Manager with the name `OPENAI_KEY`.
-
-3.  **Page Elements**:
-    -   Ensure the page IDs in `digitalProduct.js` (e.g., `#dropdownProductType`, `#generate`, `#reportSection`) match your specific Wix Editor elements.
-
-## Usage
-
-1.  **Generate**: Users log in, fill out the form, and click "Generate".
-2.  **Review**: The AI generates the content which is displayed on the screen.
-3.  **Action**: Users can "Copy" the text or "Save" it to their dashboard for future reference.
-
-## Tech Stack
+## 🛠️ Tech Stack
 
 -   **Platform**: Wix Velo (JavaScript)
--   **AI Model**: OpenAI GPT-4o
--   **Dependencies**: `wix-location-frontend`, `wix-data`, `wix-window-frontend`, `wix-members-frontend`, `wix-fetch`, `wix-secrets-backend`.
+-   **AI Model**: OpenAI GPT-5-mini (via Responses API)
+-   **PDF Engine**: PDFKit
+-   **Media Storage**: Wix Media Manager
+-   **Styling**: Custom Velo UI with Markdown-to-PDF parsing logic.
+
+## 📖 Usage Flow
+
+1.  **Select**: User chooses their product type and fills in details (Topic, Tone, Goal, etc.).
+2.  **Generate**: System sends a structured prompt to OpenAI.
+3.  **Automate**: As soon as the text appears, the backend begins generating a PDF version of the content.
+4.  **Action**: User can immediately read the content, click "Download" for the PDF, or "Save" to keep it in their account history.

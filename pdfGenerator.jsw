@@ -165,9 +165,13 @@ export async function generatePDF(contentData) {
                 doc.font('Helvetica'); // Reset
                 lastContentY = doc.y;
             }
-            // List Items
-            else if (line.startsWith('- ') || line.startsWith('* ')) {
-                doc.fontSize(12).list([line.substring(2)], {
+            // List Items (Bullets and Numbered)
+            else if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s/.test(line)) {
+                let listText = line.startsWith('- ') || line.startsWith('* ') 
+                    ? line.substring(2) 
+                    : line.replace(/^\d+\.\s/, '');
+
+                doc.fontSize(12).list([listText], {
                     bulletRadius: 2,
                     textIndent: 20,
                     bulletIndent: 10
