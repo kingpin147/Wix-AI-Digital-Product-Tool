@@ -142,6 +142,17 @@ export async function generatePDF(contentData) {
                 doc.moveDown(0.5);
                 continue;
             }
+
+            // Horizontal Rule
+            if (line === '---' || line === '***' || line === '___') {
+                doc.moveDown(0.5);
+                doc.moveTo(doc.page.margins.left, doc.y)
+                   .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+                   .stroke('#CCCCCC');
+                doc.moveDown(0.8);
+                continue;
+            }
+
             
             // Headings
             if (line.startsWith('# ')) {
@@ -181,7 +192,19 @@ export async function generatePDF(contentData) {
             }
             // Normal Paragraphs
             else {
-                doc.fontSize(12).text(line, {
+                // Simple Bold/Italic parser for PDFKit
+                // This replaces **text** with a bold font and *text* with italics
+                // Note: PDFKit doesn't support mixed fonts in a single string easily without 'text' chunks
+                // For now, we'll implement a basic version that handles lines that are entirely bold/italic
+                // or just strips the symbols if they are internal for better visual appearance.
+                
+                let processedLine = line
+                    .replace(/\*\*(.*?)\*\*/g, '$1') // Strip bold
+                    .replace(/\*(.*?)\*/g, '$1')   // Strip italic
+                    .replace(/__(.*?)__/g, '$1')   // Strip __bold__
+                    .replace(/_(.*?)_/g, '$1');    // Strip _italic_
+
+                doc.fontSize(12).text(processedLine, {
                     align: 'left',
                     lineGap: 4
                 });
@@ -190,6 +213,7 @@ export async function generatePDF(contentData) {
                 }
                 lastContentY = doc.y;
             }
+
         }
         
         // Log the final content position

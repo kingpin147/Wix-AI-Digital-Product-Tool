@@ -5,18 +5,15 @@ This project is a Wix Velo (formerly Corvid) application designed to generate AI
 ## 🚀 Key Features
 
 -   **Dynamic AI Content Generation**: Generates comprehensive, high-quality products using advanced reasoning models.
--   **Product-Specific Logic**: Tailored prompt instructions for different formats:
-    -   **Lead Magnet – Downloadable**: Structured for multi-page PDF value.
-    -   **Workbooks & Worksheets**: Interactive exercises and reflection points.
-    -   **Checklists & Cheat Sheets**: Action-oriented, concise steps.
-    -   **Lesson Plans & Course Outlines**: Formal educational structures.
-    -   **Page Sections & Copy**: High-impact marketing snippets.
+-   **Product-Specific Logic**: Tailored prompt instructions for different formats, now including **Full Books & Manuscripts**.
 -   **Instant PDF Conversion**: Automatically converts generated text into a professionally formatted PDF document.
--   **Professional Formatting**: Uses Markdown parsing and PDFKit to create stylized headers, bulleted lists, and clean layouts.
+-   **Professional Formatting**: Uses enhanced Markdown parsing to handle headers, bulleted lists, horizontal rules, and clean typography.
+-   **State Persistence**: Implemented session-aware persistence so users don't lose progress when navigating between pages.
 -   **Branded Experience**: Integrated headers and footers in every generated PDF with custom links.
 -   **Membership Gating**: Secure access for subscribers via Wix Pricing Plans integration.
--   **Save & History Dashboard**: Users can save products to their profile, including the generated text and the download link.
--   **One-Click Actions**: Integrated "Download PDF", "Save to Dashboard", and "Copy to Clipboard" functionality.
+-   **Save & History Dashboard**: Users can save products to their profile and access direct "Download PDF" links for historical records.
+-   **Intelligent UI Feedback**: Visual confirmations for copy-to-clipboard actions and real-time status updates during generation.
+
 
 ## 📂 Project Structure
 

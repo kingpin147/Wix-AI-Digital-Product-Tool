@@ -1,4 +1,6 @@
 import wixLocationFrontend from "wix-location-frontend";
+import { local } from 'wix-storage-frontend';
+
 import { createOpenAIResponse } from "backend/openAi"
 import wixData from 'wix-data';
 import wixWindowFrontend from "wix-window-frontend";
@@ -57,11 +59,12 @@ const PRODUCT_RULES = {
         structuralRequirement: "Focus on readability and conversion. Use concise paragraphs and bold highlights."
     },
     "Book": {
-        mustInclude: ["COMING SOON"],
-        mustNotBe: ["Any output"],
-        defaultAssumption: "Hold for Post-Beta.",
-        structuralRequirement: "NOT AVAILABLE IN BETA."
+        mustInclude: ["Catchy Title", "Table of Contents", "Introduction", "Thematic Chapters", "Conclusion", "About the Author"],
+        mustNotBe: ["Short article", "Single page guide"],
+        defaultAssumption: "A comprehensive long-form manuscript or structured guide.",
+        structuralRequirement: "Use hierarchy (# Title, ## Chapters). Focus on depth and narrative flow."
     }
+
 };
 
 const UNIVERSAL_CHECKLIST = [
@@ -90,7 +93,6 @@ function getRulesForProduct(type) {
 
     return null;
 }
-
 
 let options = {
     fieldsets: ['FULL']
@@ -124,7 +126,11 @@ $w.onReady(async function () {
     $w("#generate").onClick(onGenerateButtonClick);
     console.log('  ✅ Generate button click handler attached');
 
+    // Restoration Logic
+    restoreReportState();
+
     console.log('\n========================================');
+
     console.log('✅ INITIALIZATION COMPLETE');
     console.log('========================================');
     console.log('Summary:');
@@ -243,7 +249,6 @@ async function loadInstructions() {
     }
 }
 
-
 /**
  * Handles the click event of the Generate button.
  */
@@ -274,17 +279,11 @@ async function onGenerateButtonClick() {
         return;
     }
 
-    // --- Show Status: "Generating Report" ---
+    // Status: "Generating Report"
     $w("#errorText1").text = "🤖 Generating report... Please wait.";
     $w("#errorText1").expand();
-    $w("#generate").disable(); // Disable button while processing
+    $w("#generate").disable();
 
-    // BETA RESTRICTION: Check for Book
-    if (productType === "Book") {
-        $w("#errorText1").text = "🚧 'Full Book' is held for Post-Beta. Please select another product type.";
-        $w("#generate").enable();
-        return;
-    }
 
     // 2. Query the AdminControl collection for the instruction
     try {
@@ -379,6 +378,9 @@ async function sendToOpenAI(prompt, instructions) {
                 fileUrl = response.fileUrl;
                 fileName = response.fileName;
                 $w('#errorText2').text = "✅ Your product and download file are ready!";
+
+                // Persistence
+                saveReportState();
             } else {
                 console.error("PDF preparation failed:", response.error);
                 $w('#errorText2').text = "⚠️ Content ready, but PDF preparation failed. You can still copy the text.";
@@ -387,6 +389,7 @@ async function sendToOpenAI(prompt, instructions) {
             console.error("PDF preparation error:", pdfErr);
             $w('#errorText2').text = "⚠️ Note: PDF could not be pre-generated. Click download to try again.";
         }
+
 
     } catch (error) {
         console.error("Failed to get response from OpenAI:", error);
@@ -402,27 +405,36 @@ $w('#generateAgain').onClick((event) => {
     $w("#formSection").expand();
     $w("#reportOutput").text = " ";
 
+    // Clear persistence
+    local.removeItem("lastReport");
+    local.removeItem("lastFileUrl");
+    local.removeItem("lastFileName");
+
     // --- Action 2: Collapse error text when trying again ---
     $w("#errorText1").collapse();
     $w('#errorText2').collapse();
 })
 
-$w('#copy').onClick(async (event) => {
-    // Collapse any old error text before trying to copy
-    $w('#errorText2').collapse();
 
+$w('#copy').onClick(async (event) => {
+    $w('#errorText2').collapse();
+    const originalLabel = $w('#copy').label;
     const ReportText = $w('#reportOutput').text;
+
     await wixWindowFrontend
         .copyToClipboard(ReportText)
         .then(() => {
-            $w('#errorText2').text = "✅ Report Successfully Copied";
+            $w('#copy').label = "Copied! ✅";
+            setTimeout(() => { $w('#copy').label = originalLabel; }, 2000);
+            $w('#errorText2').text = "✅ Content copied to clipboard";
             $w('#errorText2').expand();
         })
         .catch((err) => {
-            $w('#errorText2').text = "❌ Report copy failed... try again";
+            $w('#errorText2').text = "❌ Copy failed. Please try again.";
             $w('#errorText2').expand();
         });
 })
+
 
 $w('#saveReport').onClick(async (event) => {
     $w('#saveReport').disable();
@@ -490,3 +502,33 @@ $w('#downloadProduct').onClick(async (event) => {
         $w('#errorText2').expand();
     }
 });
+
+// Persistence Helpers
+function saveReportState() {
+    if (report) {
+        local.setItem("lastReport", report);
+        if (fileUrl) local.setItem("lastFileUrl", fileUrl);
+        if (fileName) local.setItem("lastFileName", fileName);
+        console.log("💾 Report state saved to local storage.");
+    }
+}
+
+function restoreReportState() {
+    const savedReport = local.getItem("lastReport");
+    if (savedReport) {
+        console.log("🔄 Restoring saved report state...");
+        report = savedReport;
+        fileUrl = local.getItem("lastFileUrl");
+        fileName = local.getItem("lastFileName");
+
+        $w("#reportOutput").text = report;
+        $w("#reportSection").expand();
+        $w("#formSection").collapse();
+
+        if (fileUrl) {
+            $w('#errorText2').text = "✅ Your previous product is ready for download.";
+            $w('#errorText2').expand();
+        }
+
+    }
+}

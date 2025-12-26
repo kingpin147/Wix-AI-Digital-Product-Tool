@@ -1,5 +1,7 @@
 import wixData from 'wix-data';
 import { currentMember, authentication } from "wix-members-frontend";
+import wixLocationFrontend from "wix-location-frontend";
+
 
 $w.onReady(async function () {
     let memberId = null;
@@ -55,12 +57,30 @@ $w.onReady(async function () {
         // Configure how each item is displayed
         $w("#reportRepeater").onItemReady(($item, itemData) => {
             if (itemData._id === "no-reports") {
-                // Style the "no reports" message differently (optional)
                 $item("#reportText").text = itemData.report;
+                // Hide download button for placeholder
+                if ($item("#pdfDownload")) $item("#pdfDownload").collapse();
             } else {
-                $item("#reportText").text = itemData.report || "";
+                // Clean up markdown hashes for display
+                const cleanText = (itemData.report || "").replace(/^#+\s/gm, '');
+                $item("#reportText").text = cleanText;
+
+                // Handle PDF Download Button
+                if ($item("#pdfDownload")) {
+                    $item("#pdfDownload").expand();
+                    $item("#pdfDownload").onClick(() => {
+                        if (itemData.fileUrl) {
+                            console.log("Downloading existing PDF:", itemData.fileUrl);
+                            wixLocationFrontend.to(itemData.fileUrl);
+                        } else {
+                            console.warn("No fileUrl found for report:", itemData._id);
+                            // Optional: Alert user or attempt regeneration
+                        }
+                    });
+                }
             }
         });
+
 
     } catch (error) {
         console.error("Error querying SavedReports:", error);
