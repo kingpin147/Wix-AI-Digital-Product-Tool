@@ -61,8 +61,15 @@ $w.onReady(async function () {
                 // Hide download button for placeholder
                 if ($item("#pdfDownload")) $item("#pdfDownload").collapse();
             } else {
-                // Clean up markdown hashes for display
-                const cleanText = (itemData.report || "").replace(/^#+\s/gm, '');
+                // Clean up markdown symbols for display
+                // Remove hashes, asterisks (bold/italic), and underscores
+                const cleanText = (itemData.report || "")
+                    .replace(/^#+\s/gm, '')    // Remove leading #
+                    .replace(/\*\*(.*?)\*\*/g, '$1') // Strip bold **
+                    .replace(/\*(.*?)\*/g, '$1')   // Strip italic *
+                    .replace(/__(.*?)__/g, '$1')   // Strip __bold__
+                    .replace(/_(.*?)_/g, '$1');    // Strip _italic_
+
                 $item("#reportText").text = cleanText;
 
                 // Handle PDF Download Button
@@ -71,10 +78,12 @@ $w.onReady(async function () {
                     $item("#pdfDownload").onClick(() => {
                         if (itemData.fileUrl) {
                             console.log("Downloading existing PDF:", itemData.fileUrl);
+                            $item("#pdfDownload").label = "Downloading...";
                             wixLocationFrontend.to(itemData.fileUrl);
+                            setTimeout(() => { $item("#pdfDownload").label = "Download PDF"; }, 2000);
                         } else {
                             console.warn("No fileUrl found for report:", itemData._id);
-                            // Optional: Alert user or attempt regeneration
+                            $item("#pdfDownload").label = "File Missing ⚠️";
                         }
                     });
                 }

@@ -126,6 +126,47 @@ $w.onReady(async function () {
     $w("#generate").onClick(onGenerateButtonClick);
     console.log('  ✅ Generate button click handler attached');
 
+    // Dynamic Word Count Adjustment
+    $w("#dropdownProductType").onChange(() => {
+        const type = $w("#dropdownProductType").value;
+        console.log(`Product type changed to: ${type}`);
+
+        if (type === "Checklist / Cheat Sheet" || type === "Page Section / Copy") {
+            // Short types: filter out "Long"
+            const currentOptions = $w("#wordCount").options;
+            $w("#wordCount").options = currentOptions.filter(opt => !opt.value.includes("Long"));
+            console.log("Word count limited for short product type.");
+        } else {
+            // Restore full options (re-populate)
+            populateWordCountDropdown();
+        }
+    });
+
+    // Navigation buttons (assumed IDs based on user's manual work)
+    if ($w("#goToDashboard")) {
+        $w("#goToDashboard").onClick(() => wixLocationFrontend.to("/dashboard"));
+    }
+    if ($w("#createNewProduct")) {
+        $w("#createNewProduct").onClick(() => {
+            $w("#reportSection").collapse();
+            $w("#formSection").expand();
+            wixWindowFrontend.scrollTo(0, 0);
+        });
+    }
+
+    // Input Field Helpers (Updating placeholders for clarity)
+    $w("#dropdownProductType").placeholder = "What kind of product? (e.g. eBook, Checklist)";
+    $w("#dropdownGenre").placeholder = "What is the main topic?";
+    $w("#dropdownTone").placeholder = "How should it sound? (e.g. Professional, Friendly)";
+    $w("#dropdownTargetAudience").placeholder = "Who is this for?";
+    $w("#purpose").placeholder = "What is the main goal of this product?";
+    $w("#wordCount").placeholder = "Select target length";
+    $w("#keywordsTextArea").placeholder = "Enter key terms to include (comma separated)";
+    $w("#notesTextArea").placeholder = "Any specific instructions or context for the AI?";
+
+    // Copy Button Initial Label Clarification
+    $w("#copy").label = "Copy to Clipboard";
+
     // Restoration Logic
     restoreReportState();
 
@@ -425,8 +466,8 @@ $w('#copy').onClick(async (event) => {
         .copyToClipboard(ReportText)
         .then(() => {
             $w('#copy').label = "Copied! ✅";
-            setTimeout(() => { $w('#copy').label = originalLabel; }, 2000);
-            $w('#errorText2').text = "✅ Content copied to clipboard";
+            setTimeout(() => { $w('#copy').label = "Copy to Clipboard"; }, 2000);
+            $w('#errorText2').text = "✅ Content copied to clipboard (ready to paste)";
             $w('#errorText2').expand();
         })
         .catch((err) => {
