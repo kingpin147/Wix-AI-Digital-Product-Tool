@@ -1,5 +1,4 @@
 import wixLocationFrontend from "wix-location-frontend";
-import { local } from 'wix-storage-frontend';
 
 import { createOpenAIResponse } from "backend/openAi"
 import wixData from 'wix-data';
@@ -142,17 +141,6 @@ $w.onReady(async function () {
         }
     });
 
-    // Navigation buttons (assumed IDs based on user's manual work)
-    if ($w("#goToDashboard")) {
-        $w("#goToDashboard").onClick(() => wixLocationFrontend.to("/dashboard"));
-    }
-    if ($w("#createNewProduct")) {
-        $w("#createNewProduct").onClick(() => {
-            $w("#reportSection").collapse();
-            $w("#formSection").expand();
-            wixWindowFrontend.scrollTo(0, 0);
-        });
-    }
 
     // Input Field Helpers (Updating placeholders for clarity)
     $w("#dropdownProductType").placeholder = "What kind of product? (e.g. eBook, Checklist)";
@@ -161,14 +149,9 @@ $w.onReady(async function () {
     $w("#dropdownTargetAudience").placeholder = "Who is this for?";
     $w("#purpose").placeholder = "What is the main goal of this product?";
     $w("#wordCount").placeholder = "Select target length";
-    $w("#keywordsTextArea").placeholder = "Enter key terms to include (comma separated)";
-    $w("#notesTextArea").placeholder = "Any specific instructions or context for the AI?";
 
     // Copy Button Initial Label Clarification
     $w("#copy").label = "Copy to Clipboard";
-
-    // Restoration Logic
-    restoreReportState();
 
     console.log('\n========================================');
 
@@ -321,7 +304,7 @@ async function onGenerateButtonClick() {
     }
 
     // Status: "Generating Report"
-    $w("#errorText1").text = "🤖 Generating report... Please wait.";
+    $w("#errorText1").html = `<p style="color: #333333; font-weight: bold;">🤖 Generating report... Please wait.</p>`;
     $w("#errorText1").expand();
     $w("#generate").disable();
 
@@ -418,17 +401,14 @@ async function sendToOpenAI(prompt, instructions) {
             if (response.success) {
                 fileUrl = response.fileUrl;
                 fileName = response.fileName;
-                $w('#errorText2').text = "✅ Your product and download file are ready!";
-
-                // Persistence
-                saveReportState();
+                $w('#errorText2').html = `<p style="color: #333333; font-weight: bold;">✅ Your product and download file are ready!</p>`;
             } else {
                 console.error("PDF preparation failed:", response.error);
-                $w('#errorText2').text = "⚠️ Content ready, but PDF preparation failed. You can still copy the text.";
+                $w('#errorText2').html = `<p style="color: #333333;">⚠️ Content ready, but PDF preparation failed. You can still copy the text.</p>`;
             }
         } catch (pdfErr) {
             console.error("PDF preparation error:", pdfErr);
-            $w('#errorText2').text = "⚠️ Note: PDF could not be pre-generated. Click download to try again.";
+            $item('#errorText2').html = `<p style="color: #333333;">⚠️ Note: PDF could not be pre-generated. Click download to try again.</p>`;
         }
 
 
@@ -445,11 +425,6 @@ $w('#generateAgain').onClick((event) => {
     $w("#reportSection").collapse();
     $w("#formSection").expand();
     $w("#reportOutput").text = " ";
-
-    // Clear persistence
-    local.removeItem("lastReport");
-    local.removeItem("lastFileUrl");
-    local.removeItem("lastFileName");
 
     // --- Action 2: Collapse error text when trying again ---
     $w("#errorText1").collapse();
@@ -493,7 +468,7 @@ $w('#saveReport').onClick(async (event) => {
         .insert("SavedReports", toInsert)
         .then((item) => {
             console.log("Saved item:", item);
-            $w('#errorText2').text = "✅ Product Successfully Saved to your Dashboard!";
+            $w('#errorText2').html = `<p style="color: #333333; font-weight: bold;">✅ Product Successfully Saved to your Dashboard!</p>`;
             $w('#errorText2').expand();
             // We keep the text visible so they can still read/copy/download it.
             // But we change the button to show it's done.
@@ -544,32 +519,3 @@ $w('#downloadProduct').onClick(async (event) => {
     }
 });
 
-// Persistence Helpers
-function saveReportState() {
-    if (report) {
-        local.setItem("lastReport", report);
-        if (fileUrl) local.setItem("lastFileUrl", fileUrl);
-        if (fileName) local.setItem("lastFileName", fileName);
-        console.log("💾 Report state saved to local storage.");
-    }
-}
-
-function restoreReportState() {
-    const savedReport = local.getItem("lastReport");
-    if (savedReport) {
-        console.log("🔄 Restoring saved report state...");
-        report = savedReport;
-        fileUrl = local.getItem("lastFileUrl");
-        fileName = local.getItem("lastFileName");
-
-        $w("#reportOutput").text = report;
-        $w("#reportSection").expand();
-        $w("#formSection").collapse();
-
-        if (fileUrl) {
-            $w('#errorText2').text = "✅ Your previous product is ready for download.";
-            $w('#errorText2').expand();
-        }
-
-    }
-}
