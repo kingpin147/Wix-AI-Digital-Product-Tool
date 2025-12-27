@@ -192,22 +192,48 @@ export async function generatePDF(contentData) {
             }
             // Normal Paragraphs
             else {
-                // Simple Bold/Italic parser for PDFKit
-                // This replaces **text** with a bold font and *text* with italics
-                // Note: PDFKit doesn't support mixed fonts in a single string easily without 'text' chunks
-                // For now, we'll implement a basic version that handles lines that are entirely bold/italic
-                // or just strips the symbols if they are internal for better visual appearance.
+                const parts = [];
+                let remaining = line;
                 
-                let processedLine = line
-                    .replace(/\*\*(.*?)\*\*/g, '$1') // Strip bold
-                    .replace(/\*(.*?)\*/g, '$1')   // Strip italic
-                    .replace(/__(.*?)__/g, '$1')   // Strip __bold__
-                    .replace(/_(.*?)_/g, '$1');    // Strip _italic_
+                // Regex to find **bold**, *italic*, __bold__, _italic_
+                // We'll prioritize ** over *
+                const regex = /(\*\*.*?\*\*|\*.*?\*|__.*?__|_.*?_)/g;
+                let lastIndex = 0;
+                let match;
 
-                doc.fontSize(12).text(processedLine, {
-                    align: 'left',
-                    lineGap: 4
-                });
+                while ((match = regex.exec(line)) !== null) {
+                    // Add plain text before match
+                    if (match.index > lastIndex) {
+                        parts.push({ text: line.substring(lastIndex, match.index), font: 'Helvetica' });
+                    }
+
+                    const m = match[0];
+                    if (m.startsWith('**') || m.startsWith('__')) {
+                        parts.push({ text: m.substring(2, m.length - 2), font: 'Helvetica-Bold' });
+                    } else if (m.startsWith('*') || m.startsWith('_')) {
+                        parts.push({ text: m.substring(1, m.length - 1), font: 'Helvetica-Oblique' });
+                    }
+                    lastIndex = regex.lastIndex;
+                }
+
+                if (lastIndex < line.length) {
+                    parts.push({ text: line.substring(lastIndex), font: 'Helvetica' });
+                }
+
+                if (parts.length === 0) {
+                    parts.push({ text: line, font: 'Helvetica' });
+                }
+
+                // Render parts
+                for (let j = 0; j < parts.length; j++) {
+                    const isLastPart = j === parts.length - 1;
+                    doc.font(parts[j].font).fontSize(12).text(parts[j].text, {
+                        continued: !isLastPart,
+                        align: 'left',
+                        lineGap: 4
+                    });
+                }
+
                 if (i < lines.length - 1) {
                     doc.moveDown(0.5);
                 }

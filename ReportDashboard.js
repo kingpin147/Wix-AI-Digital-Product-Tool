@@ -2,6 +2,24 @@ import wixData from 'wix-data';
 import { currentMember, authentication } from "wix-members-frontend";
 import wixLocationFrontend from "wix-location-frontend";
 
+const SITE_FONT = "font-family: 'wix-madefor-text', sans-serif; font-size: 16px; color: #333333; line-height: 1.6;";
+const PINK_ACCENT = "#FF2E8A";
+
+/**
+ * Cleans Markdown symbols for plain-text elements like CollapsibleText
+ * while keeping the content readable and structured.
+ */
+function stripMarkdown(markdown) {
+    if (!markdown) return "";
+    return markdown
+        .replace(/^#+\s/gm, '')         // Remove headers
+        .replace(/\*\*(.*?)\*\*/g, '$1') // Strip bold
+        .replace(/\*(.*?)\*/g, '$1')   // Strip italic
+        .replace(/__(.*?)__/g, '$1')   // Strip __bold__
+        .replace(/_(.*?)_/g, '$1')     // Strip _italic_
+        .replace(/^\s*[-*]\s+/gm, '• ') // Convert markdown bullets to standard bullets
+        .trim();
+}
 
 $w.onReady(async function () {
     let memberId = null;
@@ -61,16 +79,8 @@ $w.onReady(async function () {
                 // Hide download button for placeholder
                 if ($item("#pdfDownload")) $item("#pdfDownload").collapse();
             } else {
-                // Clean up markdown symbols for display
-                // Remove hashes, asterisks (bold/italic), and underscores
-                const cleanText = (itemData.report || "")
-                    .replace(/^#+\s/gm, '')    // Remove leading #
-                    .replace(/\*\*(.*?)\*\*/g, '$1') // Strip bold **
-                    .replace(/\*(.*?)\*/g, '$1')   // Strip italic *
-                    .replace(/__(.*?)__/g, '$1')   // Strip __bold__
-                    .replace(/_(.*?)_/g, '$1');    // Strip _italic_
-
-                $item("#reportText").text = cleanText;
+                // Clean up markdown symbols for display (CollapsibleText only supports .text)
+                $item("#reportText").text = stripMarkdown(itemData.report);
 
                 // Handle PDF Download Button
                 if ($item("#pdfDownload")) {
